@@ -59,3 +59,8 @@ resource "aws_route_table_association" "a" {
   subnet_id      = aws_subnet.my_public_subnet1.id
   route_table_id = aws_route_table.my_first_routetable.id
   }
+
+resource "aws_eip" "my_first_eib" {
+  instance = aws_instance.my_first_instance.id
+  domain   = "vpc"
+}
