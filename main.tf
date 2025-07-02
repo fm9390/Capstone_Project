@@ -18,3 +18,12 @@ resource "aws_instance" "my_first_instance" {
     Name = "MyFirstInstance"
   }
 }
+
+resource "aws_vpc" "my_first_VPC" {
+  cidr_block       = "10.0.0.0/16"
+  instance_tenancy = "default"
+
+  tags = {
+    Name = "MyFirstVPC"
+  }
+}
