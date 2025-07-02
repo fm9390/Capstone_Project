@@ -28,10 +28,19 @@ resource "aws_vpc" "my_first_VPC" {
   }
 }
 
-resource "aws_subnet" "my_first_subnet" {
+resource "aws_subnet" "my_public_subnet1" {
   vpc_id     = aws_vpc.my_first_VPC.id
-  cidr_block = "10.0.0.0/24"
+  cidr_block = "10.0.1.0/24"
   tags       = {
-   Name = "Public Subnet 1"
+   Name = "PublicSubnet1"
    }
 }
+
+resource "aws_internet_gateway" "my_first_IGW" {
+  vpc_id = aws_vpc.my_first_VPC.id
+
+  tags = {
+    Name = "IGW"
+  }
+}
+
