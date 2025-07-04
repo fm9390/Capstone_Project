@@ -81,6 +81,22 @@ resource "aws_subnet" "my_private_subnet1" {
    Name = "MyPrivateSubnet1"
    }
 }
+# Route Table für das private Subnet
+resource "aws_route_table" "private_rt" {
+  vpc_id = aws_vpc.my_first_VPC.id
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat_gw.id
+  }
+  tags = {
+    Name = "PrivateRouteTable"
+  }
+}
+# Route Table Association für das private Subnet
+resource "aws_route_table_association" "private_assoc" {
+  subnet_id      = aws_subnet.my_private_subnet1.id
+  route_table_id = aws_route_table.private_rt.id
+}
 
 resource "aws_instance" "my_private_instance1" {
   ami           = "ami-040361ed8686a66a2"
@@ -88,11 +104,28 @@ resource "aws_instance" "my_private_instance1" {
   subnet_id = aws_subnet.my_private_subnet1.id
   key_name = "vockey"
   vpc_security_group_ids = [aws_security_group.db_sg.id]
+  user_data = file("${path.module}/userdata/db-setup.sh")
   tags = {
     Name = "MyPrivateInstance1"
   }
 }
 
+resource "aws_eip" "nat_eip" {
+ domain = "vpc"
+  tags = {
+    Name = "NAT_EIP"
+  }
+}
+
+# NAT Gateway im öffentlichen Subnet
+resource "aws_nat_gateway" "nat_gw" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.my_public_subnet1.id
+  tags = {
+    Name = "MyNATGateway"
+  }
+  depends_on = [aws_internet_gateway.my_first_IGW]
+}
 
 resource "aws_security_group" "bastion_sg" {
   name        = "bastion_sg"
@@ -136,6 +169,14 @@ resource "aws_security_group" "db_sg" {
     protocol    = "tcp"
     security_groups = [aws_security_group.bastion_sg.id] # Bastion Host IP
   }
+  ingress {
+  description     = "Allow SSH from Bastion Host"
+  from_port       = 22
+  to_port         = 22
+  protocol        = "tcp"
+  security_groups = [aws_security_group.bastion_sg.id]
+}
+
   egress {
     from_port   = 0
     to_port     = 0
