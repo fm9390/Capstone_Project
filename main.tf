@@ -11,6 +11,11 @@ provider "aws" {
   region = "us-west-2"
 }
 
+module myip {
+  source  = "4ops/myip/http"
+  version = "1.0.0"
+}
+
 resource "aws_vpc" "my_first_VPC" {
   cidr_block       = "10.0.0.0/16"
   instance_tenancy = "default"
@@ -28,12 +33,19 @@ resource "aws_subnet" "my_public_subnet1" {
    }
 }
 
+
 resource "aws_instance" "my_public_instance1" {
   ami           = "ami-040361ed8686a66a2"
   instance_type = "t3.micro"
   subnet_id = aws_subnet.my_public_subnet1.id
   key_name = "vockey"
   vpc_security_group_ids = [aws_security_group.bastion_sg.id]
+  user_data = templatefile("${path.module}/userdata/wordpress.tpl.sh", {
+  DB_HOST     = aws_instance.my_private_instance1.private_ip
+  DB_NAME     = "wordpress"
+  DB_USER     = "wordpress"
+  DB_PASSWORD = "StrongPassword123!"
+})
   tags = {
     Name = "MyPublicInstance1"
   }
@@ -131,13 +143,13 @@ resource "aws_security_group" "bastion_sg" {
   name        = "bastion_sg"
   description = "Allow SSH from my IP, HTTP/HTTPS from anywhere"
   vpc_id      = aws_vpc.my_first_VPC.id
-  # SSH (nur von deiner IP)
+  # SSH (nur von meiner IP)
   ingress {
     description = "SSH from my IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["89.46.11.152/32"] # my IP
+    cidr_blocks = ["${module.myip.address}/32"] # my IP
   }
   # HTTP (für WordPress)
   ingress {
