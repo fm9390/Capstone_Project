@@ -79,6 +79,50 @@ resource "aws_lb_listener" "http_l" {
   }
 }
 
+# target group attachments missing
+# für ALB test 2 instances in target group
+# testalb user data on instances (no wordpress)
+
+resource "aws_lb_target_group_attachment" "web1" {
+  target_group_arn = aws_lb_target_group.web_lbtg.arn
+  target_id        = aws_instance.web1.id
+  port             = 80
+}
+
+resource "aws_lb_target_group_attachment" "web2" {
+  target_group_arn = aws_lb_target_group.web_lbtg.arn
+  target_id        = aws_instance.web2.id
+  port             = 80
+}
+
+resource "aws_instance" "web1" {
+  ami                    = "ami-040361ed8686a66a2" # dein AMI
+  instance_type          = "t3.micro"
+  subnet_id              = aws_subnet.my_public_subnet1.id
+  key_name               = "vockey"
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  associate_public_ip_address = true      
+  user_data              = file("${path.module}/userdata/test_ALB.sh")
+
+  tags = {
+    Name = "web1"
+  }
+}
+
+resource "aws_instance" "web2" {
+  ami                         = "ami-040361ed8686a66a2"
+  instance_type               = "t3.micro"
+  subnet_id                   = aws_subnet.my_public_subnet2.id
+  key_name                    = "vockey"
+  vpc_security_group_ids      = [aws_security_group.web_sg.id]
+  associate_public_ip_address = true                    
+  user_data                   = file("${path.module}/userdata/test_ALB.sh")
+  tags = {
+    Name = "web2"
+  }
+}
+
+
 ############################################################################################################
 # Autoscaling Web Servers 
 ############################################################################################################
