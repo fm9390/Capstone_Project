@@ -1,13 +1,8 @@
 #!/bin/bash
 set -e
 
-yum update -y
-
-amazon-linux-extras enable php8.1 -y
-yum clean metadata
-yum install -y php php-mysqlnd php-fpm php-json php-mbstring php-cli php-common php-opcache php-gd
-
-yum install -y httpd wget unzip mariadb105
+dnf update -y
+dnf install -y httpd php php-mysqlnd php-fpm php-json php-mbstring php-cli php-common php-opcache php-gd wget unzip mariadb105
 
 systemctl enable httpd
 systemctl start httpd
