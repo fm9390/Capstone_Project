@@ -86,7 +86,7 @@ resource "aws_lb_listener" "http_l" {
 ############################################################################################################
 
 resource "aws_launch_template" "web_lt" {
-  name_prefix = "web-server-"
+  name_prefix = "Web-Server-"
   image_id = "ami-0af9b40b1a16fe700"
   instance_type = "t3.micro"
   key_name = "disckey"
