@@ -8,7 +8,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-west-2"
+  region = "eu-central-1"
 }
 
 module myip {
@@ -32,7 +32,7 @@ resource "aws_vpc" "my_first_VPC" {
 resource "aws_subnet" "my_public_subnet1" {
   vpc_id     = aws_vpc.my_first_VPC.id
   cidr_block = "10.0.1.0/24"
-  availability_zone = "us-west-2a"
+  availability_zone = "eu-central-1a"
   tags       = {
   Name = "MyPublicSubnet1"
    }
@@ -85,7 +85,7 @@ resource "aws_lb_listener" "http_l" {
 
 resource "aws_launch_template" "web_lt" {
   name_prefix = "web-server-"
-  image_id = "ami-040361ed8686a66a2"
+  image_id = "ami-0150ccaf51ab55a51"
   instance_type = "t3.micro"
   key_name = "vockey"
   iam_instance_profile {
@@ -225,7 +225,7 @@ resource "aws_iam_instance_profile" "ec2_s3_profile" {
 ############################################################################################################
 
 resource "aws_instance" "Bastion_Host" {
-  ami           = "ami-040361ed8686a66a2"
+  ami           = "ami-0150ccaf51ab55a51"
   instance_type = "t3.micro"
   subnet_id = aws_subnet.my_public_subnet1.id
   key_name = "vockey"
@@ -253,7 +253,7 @@ resource "aws_eip_association" "bastion_eip_assoc" {
 resource "aws_subnet" "my_public_subnet2" {
   vpc_id     = aws_vpc.my_first_VPC.id
   cidr_block = "10.0.2.0/24"
-  availability_zone = "us-west-2b"
+  availability_zone = "eu-central-1b"
   tags       = {
    Name = "MyPublicSubnet2"
    }
@@ -294,7 +294,7 @@ resource "aws_route_table_association" "a" {
 
 # resource "aws_subnet" "my_private_subnet1" {
 #   vpc_id     = aws_vpc.my_first_VPC.id
-#   availability_zone = "us-west-2a"
+#   availability_zone = "eu-central-1a"
 #   cidr_block = "10.0.3.0/24"
 #   tags       = {
 #    Name = "MyPrivateSubnet1"
