@@ -88,6 +88,9 @@ resource "aws_launch_template" "web_lt" {
   image_id = "ami-040361ed8686a66a2"
   instance_type = "t3.micro"
   key_name = "vockey"
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_s3_profile.name
+  }
   network_interfaces {
     associate_public_ip_address = true
     device_index                = 0
@@ -143,6 +146,77 @@ resource "aws_autoscaling_policy" "cpu_policy" {
     }
     target_value       = 60.0  # ➤ Ziel: 60 % durchschnittliche CPU-Auslastung
   }
+}
+
+############################################################################################################
+# S3 Bucket / IAM role / IAM policy
+############################################################################################################
+
+# S3 bucket
+############################################################################################################
+resource "aws_s3_bucket" "wordpress" {
+  bucket = "discogs-wordpress-${random_id.bucket.hex}"
+}
+resource "aws_s3_bucket_ownership_controls" "wordpress" {
+  bucket = aws_s3_bucket.wordpress.id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+resource "aws_s3_bucket_acl" "wordpress" {
+  depends_on = [aws_s3_bucket_ownership_controls.wordpress]
+  bucket = aws_s3_bucket.wordpress.id
+  acl    = "private"
+}
+resource "random_id" "bucket" {
+  byte_length = 4
+}
+
+# IAM role & policy
+############################################################################################################
+resource "aws_iam_role" "ec2_s3_access" {
+  name = "ec2-s3-access-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_policy" "ec2_s3_policy" {
+  name = "ec2-s3-access-policy"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ]
+        Effect   = "Allow"
+        Resource = [
+          aws_s3_bucket.wordpress.arn,
+          "${aws_s3_bucket.wordpress.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "attach_policy" {
+  role       = aws_iam_role.ec2_s3_access.name
+  policy_arn = aws_iam_policy.ec2_s3_policy.arn
+}
+
+resource "aws_iam_instance_profile" "ec2_s3_profile" {
+  name = "ec2-s3-instance-profile"
+  role = aws_iam_role.ec2_s3_access.name
 }
 
 
