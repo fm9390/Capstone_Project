@@ -155,8 +155,11 @@ resource "aws_autoscaling_policy" "cpu_policy" {
 # S3 bucket
 ############################################################################################################
 resource "aws_s3_bucket" "wordpress" {
-  bucket = "discogs-wordpress-fmayer-250715"
-}
+  bucket = "discogs-wordpress-fm-20250715"
+  lifecycle {
+    ignore_changes = [object_lock_configuration]
+  }
+  }
 resource "aws_s3_bucket_ownership_controls" "wordpress" {
   bucket = aws_s3_bucket.wordpress.id
   rule {
@@ -168,14 +171,6 @@ resource "aws_s3_bucket_acl" "wordpress" {
   bucket = aws_s3_bucket.wordpress.id
   acl    = "private"
 }
-
-resource "aws_s3_bucket" "wordpress" {
-  bucket = "discogs-wordpress-fmayer-20250715"
-  lifecycle {
-    ignore_changes = [object_lock_configuration]
-  }
-}
-
 
 # IAM role & policy
 ############################################################################################################
