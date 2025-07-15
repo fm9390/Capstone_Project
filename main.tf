@@ -87,7 +87,7 @@ resource "aws_lb_listener" "http_l" {
 
 resource "aws_launch_template" "web_lt" {
   name_prefix = "web-server-"
-  image_id = "ami-0150ccaf51ab55a51"
+  image_id = "ami-0af9b40b1a16fe700"
   instance_type = "t3.micro"
   key_name = "vockey"
   iam_instance_profile {
@@ -227,7 +227,7 @@ resource "aws_iam_instance_profile" "ec2_s3_profile" {
 ############################################################################################################
 
 resource "aws_instance" "Bastion_Host" {
-  ami           = "ami-0150ccaf51ab55a51"
+  ami           = "ami-0af9b40b1a16fe700"
   instance_type = "t3.micro"
   subnet_id = aws_subnet.my_public_subnet1.id
   key_name = "vockey"
