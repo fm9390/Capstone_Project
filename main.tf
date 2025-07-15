@@ -99,7 +99,13 @@ resource "aws_launch_template" "web_lt" {
     subnet_id                   = aws_subnet.my_public_subnet1.id
     security_groups             = [aws_security_group.web_sg.id]
   }
-  user_data = base64encode(file("userdata/wordpress.tpl.sh"))
+  user_data = templatefile("${path.module}/userdata/wordpress.tpl.sh", {
+  DB_NAME     = aws_db_instance.discogs_db.db_name
+  DB_USER     = aws_db_instance.discogs_db.username
+  DB_PASSWORD = aws_db_instance.discogs_db.password
+  DB_HOST     = aws_db_instance.discogs_db.address
+})
+
   tag_specifications {
     resource_type = "instance"
     tags = {
