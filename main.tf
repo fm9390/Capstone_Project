@@ -89,7 +89,7 @@ resource "aws_launch_template" "web_lt" {
   name_prefix = "web-server-"
   image_id = "ami-0af9b40b1a16fe700"
   instance_type = "t3.micro"
-  key_name = "vockey"
+  key_name = "disckey"
   iam_instance_profile {
     name = aws_iam_instance_profile.ec2_s3_profile.name
   }
@@ -230,7 +230,7 @@ resource "aws_instance" "Bastion_Host" {
   ami           = "ami-0af9b40b1a16fe700"
   instance_type = "t3.micro"
   subnet_id = aws_subnet.my_public_subnet1.id
-  key_name = "vockey"
+  key_name = "disckey"
   vpc_security_group_ids = [aws_security_group.bastion_sg.id]
   tags = {
     Name = "BastionHost"
