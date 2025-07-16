@@ -20,3 +20,12 @@ sed -i "s/database_name_here/${DB_NAME}/" /var/www/html/wp-config.php
 sed -i "s/username_here/${DB_USER}/" /var/www/html/wp-config.php
 sed -i "s/password_here/${DB_PASSWORD}/" /var/www/html/wp-config.php
 sed -i "s/localhost/${DB_HOST}/" /var/www/html/wp-config.php
+
+echo "Trigger Terraform update" >> /tmp/debug.log
+
+if [ -f /var/www/html/wp-config.php ]; then
+  echo "wp-config.php was created successfully."
+else
+  echo "Error: wp-config.php was not created!" >&2
+  exit 1
+fi

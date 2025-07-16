@@ -16,12 +16,12 @@ module myip {
   version = "1.0.0"
 }
 
-resource "aws_vpc" "my_first_VPC" {
-  cidr_block       = "10.0.0.0/16"
+resource "aws_vpc" "wordpress_VPC" {
+  cidr_block       = "10.0.0.0/24"
   instance_tenancy = "default"
 
   tags = {
-    Name = "MyFirstVPC"
+    Name = "WordpressVPC"
   }
 }
 
@@ -32,8 +32,8 @@ resource "aws_vpc" "my_first_VPC" {
 ############################################################################################################
 
 resource "aws_subnet" "my_public_subnet1" {
-  vpc_id     = aws_vpc.my_first_VPC.id
-  cidr_block = "10.0.1.0/24"
+  vpc_id     = aws_vpc.wordpress_VPC.id
+  cidr_block = "10.0.0.0/26"
   availability_zone = "eu-central-1a"
   tags       = {
   Name = "MyPublicSubnet1"
@@ -64,7 +64,7 @@ resource "aws_lb_target_group" "web_lbtg" {
   name     = "web-lbtg"
   port     = 80
   protocol = "HTTP"
-  vpc_id   = aws_vpc.my_first_VPC.id
+  vpc_id   = aws_vpc.wordpress_VPC.id
   health_check {
     path = "/"
   }
@@ -89,7 +89,7 @@ resource "aws_launch_template" "web_lt" {
   name_prefix = "Web-Server-"
   image_id = "ami-0af9b40b1a16fe700"
   instance_type = "t3.micro"
-  key_name = "disckey"
+ key_name = var.key_name
   iam_instance_profile {
     name = aws_iam_instance_profile.ec2_s3_profile.name
   }
@@ -99,12 +99,12 @@ resource "aws_launch_template" "web_lt" {
     subnet_id                   = aws_subnet.my_public_subnet1.id
     security_groups             = [aws_security_group.web_sg.id]
   }
-  user_data = templatefile("${path.module}/userdata/wordpress.tpl.sh", {
-  DB_NAME     = aws_db_instance.discogs_db.db_name
-  DB_USER     = aws_db_instance.discogs_db.username
-  DB_PASSWORD = aws_db_instance.discogs_db.password
-  DB_HOST     = aws_db_instance.discogs_db.address
-})
+user_data = base64encode(templatefile("${path.module}/userdata/wordpress.tpl.sh", {
+  DB_HOST     = aws_db_instance.discogs_db.address,
+  DB_NAME     = var.db_name,
+  DB_USER     = var.db_user,
+  DB_PASSWORD = var.db_password
+}))
 
   tag_specifications {
     resource_type = "instance"
@@ -237,7 +237,7 @@ resource "aws_instance" "Bastion_Host" {
   ami           = "ami-0af9b40b1a16fe700"
   instance_type = "t3.micro"
   subnet_id = aws_subnet.my_public_subnet1.id
-  key_name = "disckey"
+  key_name = var.key_name
   vpc_security_group_ids = [aws_security_group.bastion_sg.id]
   tags = {
     Name = "BastionHost"
@@ -260,8 +260,8 @@ resource "aws_eip_association" "bastion_eip_assoc" {
 ############################################################################################################
 
 resource "aws_subnet" "my_public_subnet2" {
-  vpc_id     = aws_vpc.my_first_VPC.id
-  cidr_block = "10.0.2.0/24"
+  vpc_id     = aws_vpc.wordpress_VPC.id
+  cidr_block = "10.0.0.64/26"
   availability_zone = "eu-central-1b"
   tags       = {
    Name = "MyPublicSubnet2"
@@ -269,7 +269,7 @@ resource "aws_subnet" "my_public_subnet2" {
 }
 
 resource "aws_internet_gateway" "my_first_IGW" {
-  vpc_id = aws_vpc.my_first_VPC.id
+  vpc_id = aws_vpc.wordpress_VPC.id
 
   tags = {
     Name = "MyFirstIGW"
@@ -277,7 +277,7 @@ resource "aws_internet_gateway" "my_first_IGW" {
 }
 
 resource "aws_route_table" "my_first_routetable" {
-  vpc_id = aws_vpc.my_first_VPC.id
+  vpc_id = aws_vpc.wordpress_VPC.id
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.my_first_IGW.id
@@ -302,9 +302,9 @@ resource "aws_route_table_association" "a" {
 ############################################################################################################
 
 # resource "aws_subnet" "my_private_subnet1" {
-#   vpc_id     = aws_vpc.my_first_VPC.id
+#   vpc_id     = aws_vpc.wordpress_VPC.id
 #   availability_zone = "eu-central-1a"
-#   cidr_block = "10.0.3.0/24"
+#   cidr_block = "10.0.0.128/26"
 #   tags       = {
 #    Name = "MyPrivateSubnet1"
 #    }
@@ -327,9 +327,9 @@ resource "aws_db_instance" "discogs_db" {
   engine                  = "mysql"
   engine_version          = "8.0"
   instance_class          = "db.t3.micro"
-  db_name                 = "discogs"
-  username                = "admin"
-  password                = "SuperSecretPass123"
+  db_name  = var.db_name
+ username = var.db_user
+  password = var.db_password
   skip_final_snapshot     = true
   deletion_protection     = false
   publicly_accessible     = false
@@ -344,7 +344,7 @@ resource "aws_db_instance" "discogs_db" {
 
 # Route Table für das private Subnet
 # resource "aws_route_table" "private_rt" {
-#   vpc_id = aws_vpc.my_first_VPC.id
+#   vpc_id = aws_vpc.wordpress_VPC.id
 #   route {
 #     cidr_block     = "0.0.0.0/0"
 #     nat_gateway_id = aws_nat_gateway.nat_gw.id
@@ -387,7 +387,7 @@ resource "aws_db_instance" "discogs_db" {
 resource "aws_security_group" "bastion_sg" {
   name        = "bastion_sg"
   description = "Allow SSH from my IP, HTTP/HTTPS from anywhere"
-  vpc_id      = aws_vpc.my_first_VPC.id
+  vpc_id      = aws_vpc.wordpress_VPC.id
 
   tags = {
     Name = "bastion_sg"
@@ -413,7 +413,7 @@ resource "aws_vpc_security_group_egress_rule" "bastion_allow_all" {
 resource "aws_security_group" "web_sg" {
   name        = "web_sg"
   description = "Allow HTTP from anywhere"
-  vpc_id      = aws_vpc.my_first_VPC.id
+  vpc_id      = aws_vpc.wordpress_VPC.id
   tags = {
     Name = "web_sg"
   }
@@ -437,7 +437,7 @@ resource "aws_vpc_security_group_egress_rule" "web_allow_all" {
 resource "aws_security_group" "db_sg" {
   name        = "db_sg"
   description = "Allow MySQL access from Bastion Host"
-  vpc_id      = aws_vpc.my_first_VPC.id
+  vpc_id      = aws_vpc.wordpress_VPC.id
   tags = {
     Name = "db_sg"
   }
@@ -465,3 +465,8 @@ resource "aws_vpc_security_group_egress_rule" "db_allow_all" {
 }
 
 ############################################################################################################
+
+# RDS in public subnet
+# AMI hardcoded
+
+# sec groups in console checken
