@@ -38,3 +38,9 @@ terraform.rc
 
 secrets.tfvars
 
+*.pem
+.env
+*.tfstate
+*.tfstate.backup
+.terraform/
+
