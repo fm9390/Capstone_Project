@@ -1,0 +1,3 @@
+
+/** Database password */
+define( 'DB_PASSWORD', 'password_here' );

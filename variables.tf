@@ -19,3 +19,8 @@ variable "key_name" {
   description = "Name of the EC2 Key Pair to use"
   type        = string
 }
+
+variable "region" {
+  description = "AWS Region"
+  type        = string
+}

@@ -13,15 +13,16 @@ provider "aws" {
   region = "eu-central-1"
 }
 
-module myip {
+module "myip" {
   source  = "4ops/myip/http"
   version = "1.0.0"
 }
 
 resource "aws_vpc" "wordpress_VPC" {
-  cidr_block       = "10.0.0.0/24"
-  instance_tenancy = "default"
-
+  cidr_block           = "10.0.0.0/24"
+  instance_tenancy     = "default"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
   tags = {
     Name = "WordpressVPC"
   }
@@ -34,12 +35,12 @@ resource "aws_vpc" "wordpress_VPC" {
 ############################################################################################################
 
 resource "aws_subnet" "my_public_subnet1" {
-  vpc_id     = aws_vpc.wordpress_VPC.id
-  cidr_block = "10.0.0.0/26"
+  vpc_id            = aws_vpc.wordpress_VPC.id
+  cidr_block        = "10.0.0.0/26"
   availability_zone = "eu-central-1a"
-  tags       = {
-  Name = "MyPublicSubnet1"
-   }
+  tags = {
+    Name = "MyPublicSubnet1"
+  }
 }
 
 ############################################################################################################
@@ -49,11 +50,11 @@ resource "aws_subnet" "my_public_subnet1" {
 resource "aws_lb" "web_alb" {
   name               = "web-alb"
   load_balancer_type = "application"
-  subnets            = [
+  subnets = [
     aws_subnet.my_public_subnet1.id,
     aws_subnet.my_public_subnet2.id
   ]
-  security_groups    = [aws_security_group.web_sg.id]
+  security_groups = [aws_security_group.web_sg.id]
 
   enable_deletion_protection = false
 
@@ -68,7 +69,12 @@ resource "aws_lb_target_group" "web_lbtg" {
   protocol = "HTTP"
   vpc_id   = aws_vpc.wordpress_VPC.id
   health_check {
-    path = "/"
+    path                = "/index.php"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    matcher             = "200-399"
   }
 }
 
@@ -88,12 +94,12 @@ resource "aws_lb_listener" "http_l" {
 ############################################################################################################
 
 resource "aws_launch_template" "web_lt" {
-  name_prefix = "Web-Server-"
-  image_id = "ami-0af9b40b1a16fe700"
+  name_prefix   = "Web-Server-"
+  image_id      = "ami-0af9b40b1a16fe700"
   instance_type = "t3.micro"
- key_name = var.key_name
+  key_name      = var.key_name
   iam_instance_profile {
-    name = aws_iam_instance_profile.ec2_s3_profile.name
+    name = aws_iam_instance_profile.ec2_s3_profile_new.name
   }
   network_interfaces {
     associate_public_ip_address = true
@@ -101,33 +107,33 @@ resource "aws_launch_template" "web_lt" {
     subnet_id                   = aws_subnet.my_public_subnet1.id
     security_groups             = [aws_security_group.web_sg.id]
   }
-user_data = base64encode(templatefile("${path.module}/userdata/wordpress.tpl.sh", {
-  DB_HOST     = aws_db_instance.discogs_db.address,
-  DB_NAME     = var.db_name,
-  DB_USER     = var.db_user,
-  DB_PASSWORD = var.db_password
-}))
+  user_data = base64encode(templatefile("${path.module}/userdata/wordpress.tpl.sh", {
+    DB_HOST          = aws_db_instance.discogs_db.address,
+    DB_NAME          = var.db_name,
+    DB_USER          = var.db_user,
+    DB_PASSWORD      = var.db_password,
+  }))
 
   tag_specifications {
     resource_type = "instance"
     tags = {
       Name = "web-server"
-      }
+    }
   }
 }
 
 resource "aws_autoscaling_group" "web_asg" {
-name                      = "web-asg"
-  max_size                  = 4
-  min_size                  = 2
-  desired_capacity          = 2
-  vpc_zone_identifier       = [
+  name             = "web-asg"
+  max_size         = 4
+  min_size         = 2
+  desired_capacity = 2
+  vpc_zone_identifier = [
     aws_subnet.my_public_subnet1.id,
     aws_subnet.my_public_subnet2.id
   ]
   health_check_type         = "EC2"
   health_check_grace_period = 300
-  target_group_arns = [aws_lb_target_group.web_lbtg.arn]
+  target_group_arns         = [aws_lb_target_group.web_lbtg.arn]
   launch_template {
     id      = aws_launch_template.web_lt.id
     version = "$Latest"
@@ -137,7 +143,7 @@ name                      = "web-asg"
     value               = "WebServer"
     propagate_at_launch = true
   }
-    enabled_metrics = [
+  enabled_metrics = [
     "GroupMinSize",
     "GroupMaxSize",
     "GroupDesiredCapacity",
@@ -155,7 +161,7 @@ resource "aws_autoscaling_policy" "cpu_policy" {
     predefined_metric_specification {
       predefined_metric_type = "ASGAverageCPUUtilization"
     }
-    target_value       = 60.0  # ➤ Ziel: 60 % durchschnittliche CPU-Auslastung
+    target_value = 60.0 # ➤ Ziel: 60 % durchschnittliche CPU-Auslastung
   }
 }
 
@@ -167,10 +173,49 @@ resource "aws_autoscaling_policy" "cpu_policy" {
 ############################################################################################################
 resource "aws_s3_bucket" "wordpress" {
   bucket = "discogs-wordpress-fm-20250715"
+
   lifecycle {
     ignore_changes = [object_lock_configuration]
   }
+}
+
+resource "aws_s3_bucket_public_access_block" "wordpress" {
+  bucket = aws_s3_bucket.wordpress.id
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
+
+resource "aws_s3_bucket_policy" "public_read" {
+  bucket = aws_s3_bucket.wordpress.id
+  depends_on = [aws_s3_bucket_public_access_block.wordpress]
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect    = "Allow",
+        Principal = "*",
+        Action    = [
+          "s3:GetObject"
+        ],
+        Resource  = "${aws_s3_bucket.wordpress.arn}/*"
+      }
+    ]
+  })
+}
+
+resource "aws_s3_bucket_website_configuration" "wordpress_web_conf" {
+  bucket = aws_s3_bucket.wordpress.id
+  index_document {
+    suffix = "index.html"
   }
+  error_document {
+    key = "error.html"
+  }
+}
+
 resource "aws_s3_bucket_ownership_controls" "wordpress" {
   bucket = aws_s3_bucket.wordpress.id
   rule {
@@ -179,9 +224,17 @@ resource "aws_s3_bucket_ownership_controls" "wordpress" {
 }
 resource "aws_s3_bucket_acl" "wordpress" {
   depends_on = [aws_s3_bucket_ownership_controls.wordpress]
-  bucket = aws_s3_bucket.wordpress.id
-  acl    = "private"
+  bucket     = aws_s3_bucket.wordpress.id
+  acl        = "private"
 }
+
+resource "null_resource" "sync_website" {
+  depends_on = [aws_s3_bucket.wordpress]
+  provisioner "local-exec" {
+    command = "chmod +x ./bucket_upload.sh && ./bucket_upload.sh"
+  }
+}
+
 
 # IAM role & policy
 ############################################################################################################
@@ -210,7 +263,7 @@ resource "aws_iam_policy" "ec2_s3_policy" {
           "s3:PutObject",
           "s3:ListBucket"
         ]
-        Effect   = "Allow"
+        Effect = "Allow"
         Resource = [
           aws_s3_bucket.wordpress.arn,
           "${aws_s3_bucket.wordpress.arn}/*"
@@ -225,8 +278,8 @@ resource "aws_iam_role_policy_attachment" "attach_policy" {
   policy_arn = aws_iam_policy.ec2_s3_policy.arn
 }
 
-resource "aws_iam_instance_profile" "ec2_s3_profile" {
-  name = "ec2-s3-instance-profile"
+resource "aws_iam_instance_profile" "ec2_s3_profile_new" {
+  name = "ec2-s3-instance-profile_new"
   role = aws_iam_role.ec2_s3_access.name
 }
 
@@ -236,10 +289,10 @@ resource "aws_iam_instance_profile" "ec2_s3_profile" {
 ############################################################################################################
 
 resource "aws_instance" "Bastion_Host" {
-  ami           = "ami-0af9b40b1a16fe700"
-  instance_type = "t3.micro"
-  subnet_id = aws_subnet.my_public_subnet1.id
-  key_name = var.key_name
+  ami                    = "ami-0af9b40b1a16fe700"
+  instance_type          = "t3.micro"
+  subnet_id              = aws_subnet.my_public_subnet1.id
+  key_name               = var.key_name
   vpc_security_group_ids = [aws_security_group.bastion_sg.id]
   tags = {
     Name = "BastionHost"
@@ -262,12 +315,12 @@ resource "aws_eip_association" "bastion_eip_assoc" {
 ############################################################################################################
 
 resource "aws_subnet" "my_public_subnet2" {
-  vpc_id     = aws_vpc.wordpress_VPC.id
-  cidr_block = "10.0.0.64/26"
+  vpc_id            = aws_vpc.wordpress_VPC.id
+  cidr_block        = "10.0.0.64/26"
   availability_zone = "eu-central-1b"
-  tags       = {
-   Name = "MyPublicSubnet2"
-   }
+  tags = {
+    Name = "MyPublicSubnet2"
+  }
 }
 
 resource "aws_internet_gateway" "my_first_IGW" {
@@ -292,95 +345,113 @@ resource "aws_route_table" "my_first_routetable" {
 resource "aws_route_table_association" "a" {
   subnet_id      = aws_subnet.my_public_subnet1.id
   route_table_id = aws_route_table.my_first_routetable.id
-  }
+}
 
-  resource "aws_route_table_association" "b" {
+resource "aws_route_table_association" "b" {
   subnet_id      = aws_subnet.my_public_subnet2.id
   route_table_id = aws_route_table.my_first_routetable.id
+}
+
+############################################################################################################
+# Private Subnets 
+############################################################################################################
+
+resource "aws_subnet" "my_private_subnet1" {
+  vpc_id            = aws_vpc.wordpress_VPC.id
+  availability_zone = "eu-central-1a"
+  cidr_block        = "10.0.0.128/26"
+  tags = {
+    Name = "MyPrivateSubnet1"
   }
+}
 
-############################################################################################################
-# Private Subnet 1 
-############################################################################################################
-
-# resource "aws_subnet" "my_private_subnet1" {
-#   vpc_id     = aws_vpc.wordpress_VPC.id
-#   availability_zone = "eu-central-1a"
-#   cidr_block = "10.0.0.128/26"
-#   tags       = {
-#    Name = "MyPrivateSubnet1"
-#    }
-# }
+resource "aws_subnet" "my_private_subnet2" {
+  vpc_id            = aws_vpc.wordpress_VPC.id
+  availability_zone = "eu-central-1b"
+  cidr_block        = "10.0.0.192/26"
+  tags = {
+    Name = "MyPrivateSubnet2"
+  }
+}
 
 # RDS Instance
 resource "aws_db_subnet_group" "discogs_db_subnet_group" {
-  name       = "discogs-db-subnet-group"
+  name = "discogs-db-subnet-group"
   subnet_ids = [
-    aws_subnet.my_public_subnet1.id,
-    aws_subnet.my_public_subnet2.id
+    aws_subnet.my_private_subnet1.id,
+    aws_subnet.my_private_subnet2.id
   ]
   tags = {
     Name = "DiscogsDBSubnetGroup"
   }
 }
 resource "aws_db_instance" "discogs_db" {
-  identifier              = "discogs-db"
-  allocated_storage       = 20
-  engine                  = "mysql"
-  engine_version          = "8.0"
-  instance_class          = "db.t3.micro"
-  db_name  = var.db_name
- username = var.db_user
-  password = var.db_password
-  skip_final_snapshot     = true
-  deletion_protection     = false
-  publicly_accessible     = false
-  multi_az                = false
-  db_subnet_group_name    = aws_db_subnet_group.discogs_db_subnet_group.name
-  vpc_security_group_ids  = [aws_security_group.db_sg.id]
+  identifier             = "discogs"
+  engine                 = "mysql"
+  engine_version         = "8.0"
+  instance_class         = "db.t3.micro"
+  username               = var.db_user
+  password               = var.db_password
+  db_name                = var.db_name
+  allocated_storage      = 20
+  db_subnet_group_name   = aws_db_subnet_group.discogs_db_subnet_group.name
+  vpc_security_group_ids = [aws_security_group.db_sg.id]
+  publicly_accessible    = false
+  multi_az               = false
+  skip_final_snapshot    = true
+  deletion_protection    = false
+
   tags = {
     Name = "DiscogsRDS"
   }
 }
 
 
-# Route Table für das private Subnet
-# resource "aws_route_table" "private_rt" {
-#   vpc_id = aws_vpc.wordpress_VPC.id
-#   route {
-#     cidr_block     = "0.0.0.0/0"
-#     nat_gateway_id = aws_nat_gateway.nat_gw.id
-#   }
-#   tags = {
-#     Name = "PrivateRouteTable"
-#   }
-# }
-# Route Table Association für das private Subnet
-# resource "aws_route_table_association" "private_assoc" {
-#   subnet_id      = aws_subnet.my_private_subnet1.id
-#   route_table_id = aws_route_table.private_rt.id
-# }
+
+
+#Route Table für das private Subnet
+resource "aws_route_table" "private_rt" {
+  vpc_id = aws_vpc.wordpress_VPC.id
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat_gw.id
+  }
+  tags = {
+    Name = "PrivateRouteTable"
+  }
+}
+#Route Table Association für das private Subnet
+resource "aws_route_table_association" "private_assoc" {
+  subnet_id      = aws_subnet.my_private_subnet1.id
+  route_table_id = aws_route_table.private_rt.id
+}
+
+resource "aws_route_table_association" "private_assoc_2" {
+  subnet_id      = aws_subnet.my_private_subnet2.id
+  route_table_id = aws_route_table.private_rt.id
+}
+
 
 ############################################################################################################
 # NAT Gateway
 ############################################################################################################
 
-# resource "aws_eip" "nat_eip" {
-#  domain = "vpc"
-#   tags = {
-#     Name = "NAT_EIP"
-#   }
-# }
+resource "aws_eip" "nat_eip" {
+  domain = "vpc"
+  tags = {
+    Name = "NAT_EIP"
+  }
+}
 
-# # NAT Gateway im öffentlichen Subnet
-# resource "aws_nat_gateway" "nat_gw" {
-#   allocation_id = aws_eip.nat_eip.id
-#   subnet_id     = aws_subnet.my_public_subnet1.id
-#   tags = {
-#     Name = "MyNATGateway"
-#   }
-#   depends_on = [aws_internet_gateway.my_first_IGW]
-# }
+# NAT Gateway im öffentlichen Subnet
+resource "aws_nat_gateway" "nat_gw" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.my_public_subnet1.id
+  tags = {
+    Name = "MyNATGateway"
+  }
+  depends_on = [aws_internet_gateway.my_first_IGW]
+}
 
 ############################################################################################################
 # Security Groups
@@ -397,16 +468,16 @@ resource "aws_security_group" "bastion_sg" {
 }
 resource "aws_vpc_security_group_ingress_rule" "bastion_ssh_ingress" {
   security_group_id = aws_security_group.bastion_sg.id
-  description        = "SSH from my IP"
-  from_port          = 22
-  to_port            = 22
-  ip_protocol        = "tcp"
-  cidr_ipv4          = "${module.myip.address}/32"
+  description       = "SSH from my IP"
+  from_port         = 22
+  to_port           = 22
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "${module.myip.address}/32"
 }
 resource "aws_vpc_security_group_egress_rule" "bastion_allow_all" {
   security_group_id = aws_security_group.bastion_sg.id
-  ip_protocol        = "-1"
-  cidr_ipv4          = "0.0.0.0/0"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
 }
 
 
@@ -422,16 +493,16 @@ resource "aws_security_group" "web_sg" {
 }
 resource "aws_vpc_security_group_ingress_rule" "web_http_ingress" {
   security_group_id = aws_security_group.web_sg.id
-  description        = "HTTP from anywhere"
-  from_port          = 80
-  to_port            = 80
-  ip_protocol        = "tcp"
-  cidr_ipv4          = "0.0.0.0/0"
+  description       = "HTTP from anywhere"
+  from_port         = 80
+  to_port           = 80
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "0.0.0.0/0"
 }
 resource "aws_vpc_security_group_egress_rule" "web_allow_all" {
   security_group_id = aws_security_group.web_sg.id
-  ip_protocol        = "-1"
-  cidr_ipv4          = "0.0.0.0/0"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
 }
 
 ############################################################################################################
@@ -462,8 +533,8 @@ resource "aws_vpc_security_group_ingress_rule" "db_ssh_from_bastion" {
 }
 resource "aws_vpc_security_group_egress_rule" "db_allow_all" {
   security_group_id = aws_security_group.db_sg.id
-  ip_protocol        = "-1"
-  cidr_ipv4          = "0.0.0.0/0"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
 }
 
 ############################################################################################################
