@@ -1,84 +1,145 @@
-### Capstone_Project - Wordpress on AWS (Level 1)
-This project sets up a secure and functional WordPress blog using **Terraform** on **AWS** as part of the Capstone Cloud Engineering Challenge. It includes a public EC2 instance running WordPress and a private EC2 instance running a MariaDB database in a private subnet, deployed inside a custom VPC with security group restrictions and infrastructure best practices.
+# Scalable WordPress Hosting on AWS with Terraform
 
-![Default Infrastructure](images/Default_Project_Infrastructure-2.png)
+This project provisions a highly available, scalable WordPress infrastructure on AWS using Terraform. It includes:
 
+- A custom VPC with public and private subnets
+- Application Load Balancer (ALB)
+- Auto Scaling Group with EC2 Launch Template
+- RDS MySQL database in private subnets
+- S3 bucket for static website hosting
+- IAM roles and policies for EC2 ↔ S3 access
+- Optional NAT Gateway and Bastion Host (currently commented out)
 
 ---
 
-## Project Structure
+## Getting Started
+
+### 1. Clone this repository
+
+Start by cloning this repository to your local machine:
+
+```bash
+git clone https://github.com/your-username/wordpress-terraform.git
+cd wordpress-terraform
+````
+
+### 2. Configure your variables
+Create a terraform.tfvars file in the project root or define variables manually when applying Terraform. Example content:
+
+```bash
+key_name     = "your-ssh-key-name"
+db_name      = "wordpress"
+db_user      = "admin"
+db_password  = "your-secure-password"
+```
+🔐 Make sure to never commit sensitive data like passwords to version control.
+
+
+### 3. Initialize and apply the infrastructure
+Initialize the Terraform project and start the deployment:
+
+```bash
+terraform init
+terraform apply
+```
+Confirm the plan with `yes` when prompted.
+
+
+### 4. Access your services
+#### WordPress (via Load Balancer)
+
+After deployment, Terraform will output the DNS name of your ALB (Application Load Balancer). Open it in your browser to access your WordPress site.
+
+#### Static Website (S3-hosted)
+
+Visit your public static website hosted on S3:
+
+`http://discogs-wordpress-fm-20250715.s3-website-eu-central-1.amazonaws.com`
+
+Make sure that:
+
+- `index.html` exists in your S3 bucket
+- the bucket policy allows public read access
+
+
+### 5. Upload static content (optional)
+You can use the provided script to upload files to your S3 bucket:
+
+`./bucket_upload.sh`
+
+This syncs local static files to your S3 bucket for the website.
+
+✅ You’re all set!
+Your infrastructure is now live — scalable, accessible, and ready for WordPress.
+
+
+## Infrastructure Overview
+
+This diagram shows the architecture deployed by this Terraform configuration:
+
+<p align="center"> <img src="images/Wordpress_Project_Infrastructure-3.png" alt="WordPress Infrastructure Diagram" width="700"/> </p>
+📁 Project Structure
 
 ```bash
 .
-├── main.tf                   # Main Terraform configuration
 ├── userdata/
-│   ├── wordpress.tpl.sh      # WordPress installation script (Bash)
-│   └── db-setup.sh           # MariaDB setup script (Bash)
-└── README.md                 # This file
+│   └── wordpress.tpl.sh                          # EC2 boot script for WordPress installation
+├── website/                                      # Static site content (optional)
+├── bucket_upload.sh                              # Script to sync files to the S3 website bucket
+├── main.tf                                       # Full infrastructure definition
+├── variables.tf                                  # Input variables
+├── outputs.tf                                    # Useful outputs (ALB DNS, etc.)
+├── terraform.tfvars                              # Your variable definitions (ignored by git)
 
-
-## Architecture Overview
-
-- VPC with public and private subnets
-- Public EC2 instance (t3.micro):
-  - Hosts Apache, PHP 8.1, and WordPress
-  - Connected to Elastic IP
-Private EC2 instance (t3.micro):
-  - Runs MariaDB
-  - Accessible only from Bastion host via Security Group rules
-- NAT Gateway to allow the DB instance to update/install packages
-- Elastic IPs for the NAT Gateway and WordPress instance
-
+````
 
 ## Security Considerations
 
-- SSH access is restricted to the user's public IP via the myip Terraform module.
-- The WordPress instance has open HTTP access (port 80) for web traffic.
-- The MariaDB instance only accepts traffic from the WordPress EC2 instance via Security Group.
+- EC2 instances are launched in public subnets (with public IPs)
+- RDS is deployed in private subnets and is not publicly accessible
+- S3 bucket is configured with public read access for static site hosting
+- EC2 ↔ S3 access is managed securely via IAM roles (no hardcoded credentials)
+- NAT Gateway and Bastion Host are defined but commented out for flexibility
 
 
-## Usage
+## Cleanup
 
-# 1. Prerequisites
-- AWS CLI configured (aws configure)
-- Terraform installed (v1.5+)
-- Key pair created in AWS (vockey.pem) and referenced in main.tf
-- SSH access from your IP (handled by the myip module)
-# 2. Deployment
-- terraform init
-- terraform apply
-- Note: Deployment takes ~1–2 minutes and will output the public IP to access WordPress.
-# 3. Accessing WordPress
-- After successful deployment, navigate to the public IP (e.g. http://<bastion_eip>) to complete the WordPress setup.
-
-
-## Troubleshooting Tips
-
-- PHP version mismatch: Make sure amazon-linux-extras enable php8.1 is included in wordpress.tpl.sh.
-- Database connection error: Ensure DB credentials match and that the DB user allows remote connections ('wordpress'@'%').
-- SSH blocked? Double-check the myip module and security group CIDRs.
-
-
-## Learnings
-
-This project demonstrates:
-- VPC design & subnetting
-- EC2 provisioning with userdata
-- Secure database access patterns
-- Use of Terraform modules and variables
-
-
-## Next Steps (Level 2+ Ideas)
-
-- Add ALB (Application Load Balancer)
-- Migrate database to RDS
-- Add Autoscaling Groups
-- Multi-Availability-Zones Deployment
-- Deploy own project in AWS Infrastructure 
+To destroy all deployed infrastructure:
+`terraform destroy`
+This will remove all AWS resources defined in the configuration.
 
 
 ## Author
 
-Fanny Mayer – Cloud Engineering Trainee
--> Reach out via GitHub Issues if you have questions or feedback.
+Fanny Mayer
+
+
+## Contributions
+
+Contributions, suggestions, and issues are welcome! Feel free to open a PR or raise an issue to improve this project.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
